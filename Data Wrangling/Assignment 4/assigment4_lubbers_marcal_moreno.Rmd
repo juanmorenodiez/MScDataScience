@@ -1,0 +1,133 @@
+---
+title: "Assignment 4, lab 3, group 6"  
+author: Juan Moreno Diez, Letícia Marçal Russo, Luc Lubbers   
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+       highlight: textmate
+       theme: flatly
+       number_sections: yes
+       toc: yes
+       toc_float:
+         collapsed: yes
+         smooth_scroll: no
+---
+
+# Libraries
+
+```{r libraries, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(gridExtra)
+library(cowplot)
+```
+
+# Load dataset
+
+In this assignment, we are going to work with the dataset "Students performance in exams", retrieved from Kaggle (https://www.kaggle.com/datasets/spscientist/students-performance-in-exams).
+
+```{r}
+setwd("C:/Users/letic/Desktop/Master/DWDA/Week 5/Assignment/assigment")
+exams <- read.csv("exams.csv")
+
+```
+
+One can check the attributes of the dataset below.
+
+```{r}
+head(exams) %>% 
+  knitr::kable(format = "markdown", digits= 1, padding = 30, align = 'c')
+```
+At the summary bellow, one can see all the data types and measures of central tendency such as mean that will be useful for us later on. We can also see that there no missing values in the data. 
+
+```{r}
+summary(exams)
+```
+
+# Good plot
+
+For the good plot, we are going to work only with the features **gender**, **math.score** and **reading.score**. The idea is to check if there is difference in performance between male and female in two areas of study (math and reading). We are going to use histograms, so we can check the distributions of the scores. Additionally, we want to check if there is some discrepancy in the score mean for male and female in the two fields of study. 
+
+We will first draw the plot for reading scores. 
+
+```{r reading plot, warning = FALSE, message = FALSE}
+reading <- exams %>%
+  group_by(gender) %>%
+  mutate(avg_gender = mean(reading.score)) %>%
+  ggplot() +
+    geom_histogram(mapping = aes(x = reading.score), 
+                   col = "orange",
+                   fill = "pink") + 
+    geom_segment(aes(x = avg_gender, 
+                     y = 0, 
+                     xend = avg_gender, 
+                     yend = 55), 
+                     linetype = "dashed", 
+                     col = "#1b98e0",
+                     size = 1) +
+    facet_wrap(~ gender) +
+    labs(title = "Scores on Math and Reading: Male x Female") +
+    scale_x_continuous(name= "reading score") +
+    scale_y_continuous(name= "frequency") +
+    theme_minimal()
+
+```
+
+Now the plot for math scores.
+
+```{r math plot, warning = FALSE, message = FALSE}
+math <- exams %>%
+  group_by(gender) %>%
+  mutate(avg_gender = mean(math.score)) %>%
+  ggplot() +
+    geom_histogram(mapping = aes(x = math.score), 
+                   col = "purple",
+                   fill = "#C77CFF") + 
+    geom_segment(aes(x = avg_gender, 
+                     y = 0, 
+                     xend = avg_gender, 
+                     yend = 53), 
+                     linetype = "dashed", 
+                     col = "#1b98e0",
+                     size = 1) +
+    facet_wrap(~ gender) +
+    scale_x_continuous(name= "math score") +
+    scale_y_continuous(name= "frequency") +
+    labs(caption = "* the dashed line is the mean") +
+    theme_minimal()
+```
+
+And we will add them in a grid, in order to see the performance of males and females in math and readings in a single graph. 
+
+
+```{r grid, warning = FALSE, message = FALSE}
+plot_grid(reading, math, align = "v", nrow = 2, rel_heights = c(1, 1))
+```
+
+## Why?
+
+We consider this plot a good one, because it tells a "story". The plot is simple, clean and shows in a clear way what it is supposed to: there is a difference in male and female performance. Females have superior scores in reading (and higher mean), while males perform better in math. 
+
+We also used different colors for math and reading in order to contrast the two fields. We change the x and y axes names in order to make them look better. There is a title as well and the explanation about the dashed line (mean) was written in the bottom of the plots. 
+
+We used theme_minimal() to maximize data-to-ink ratio. 
+
+# Bad plot
+
+Now we will draw a bad plot. We are going to work with the variables **race.ethnicity** and **math.score**. 
+
+```{r}
+exams %>%
+ggplot(aes(x = "", y = math.score, fill = race.ethnicity)) + 
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar("y", start = 0) +
+  labs(title = "Scores on Math per race ethnicity") 
+```
+
+## Why?
+
+At first sight, it looks like a cool plot, but it actually does not tell a lot. What does it mean group A, B, C, D and E for race ethnicity? It is not clear and the label should be changed in order to clarify this information. 
+
+The angles in the pie chart are not well demarcated and it is not possible to make a clear sense of the size of the portions. There is no number indicating the percentage. Also, the numbers around the circle (0, 20000, 40000, 6000) do not make sense. 
+
+The x and y axes names were not deleted and they only make the graph to look busier, not adding any information. 
+  

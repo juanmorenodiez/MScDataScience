@@ -1,0 +1,154 @@
+---
+title: "Assignment 6, lab 3, group 6"  
+author: Juan Moreno Diez, Letícia Marçal Russo, Luc Lubbers   
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+       highlight: textmate
+       theme: flatly
+       number_sections: yes
+       toc: yes
+       toc_float:
+         collapsed: yes
+         smooth_scroll: no
+---
+# Libraries
+
+```{r libraries, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(factoextra)
+library(GGally)
+library(ggplot2)
+library(patchwork)
+```
+
+# Data
+
+Here we will load the data. 
+
+```{r data, warning = FALSE, message = FALSE}
+clus_df <- read_csv("https://raw.githubusercontent.com/vankesteren/dav_practicals/master/12_Unsupervised_learning_Clustering/data/clusterdata.csv")
+```
+
+Checking the dataset bellow.
+
+```{r head}
+head(clus_df) %>% 
+  knitr::kable(format = "markdown", digits= 1, padding = 30, align = 'c')
+```
+
+# Function for Euclidean distance
+
+We will create a function to calculate the Euclidean distance. 
+
+```{r}
+l2_list <- function(x, y) {
+  sqrt(sum((x - y)^2))
+}
+```
+
+# K-medians clustering algorithm
+
+Here we will program a K-medians clustering algorithm/ function called kmedians.
+
+```{r}
+kmedians <- function(dataframe, k) {
+  # random inicialization of the centroids
+  centroids <- dataframe[sample(nrow(dataframe), k), ]
+  # default valur for number of iterations is 10
+  n_iter <- 10
+  
+  # for each iteration 
+  for (it in 1:n_iter) {
+    # empty dataframe to fill with the distances
+    distances <- data.frame(matrix(NA, nrow = nrow(dataframe), ncol = k))
+    for (sample in 1:nrow(dataframe)) {
+      for (centroid in 1:nrow(centroids)) {
+        # euclidean distance between sample in dataframe and centroid
+        distances[sample, centroid] <- l2_list(dataframe[sample, ], centroids[centroid, ])
+      }
+    }
+    
+    # assign the point to the minimun distance centroid
+    assigned_clusters <- apply(distances, 1, which.min)
+    
+    # recalculate centroids
+    for (i in seq_len(k)) {
+      i_cluster <- dataframe[assigned_clusters == i,]
+      # compute median
+      centroids[k, ] <- as.list(apply(i_cluster, 2, median))
+    }
+  }
+  return (list(centroids, assigned_clusters))
+}
+```
+
+Running our algorithm with k = 7.
+```{r}
+set.seed(123)
+
+list_centers <- kmedians(clus_df, k = 7)
+
+# store in the dataframe the clusters assigned
+# to each point by the k medians algorithm
+clus_df['cluster_kmedians'] <- list_centers[2]
+
+```
+
+Information about the centroids. 
+```{r}
+print("Centroids found")
+print(list_centers[1])
+
+print("Clusters assigned to each point in the dataframe")
+print(list_centers[2])
+
+``` 
+
+# Comparison to K-means
+
+Now we will compare the results of K-medians against K-means. 
+```{r}
+# store in the dataframe the clusters assigned
+# to each point by the k means algorithm
+km.res <- kmeans(clus_df, 7, nstart = 100)
+clus_df['cluster_kmeans'] <- km.res$cluster
+```
+
+We added a new column to the data frame with the clusters assigned by k-means. Bellow is the head of the dataset. 
+```{r}
+head(clus_df) %>% 
+  knitr::kable(format = "markdown", digits= 1, padding = 30, align = 'c')
+```
+
+```{r plots, warning = FALSE, message = FALSE}
+median_plot <- clus_df %>%
+  ggplot() +
+    geom_point(aes(x = x1, y = x2, 
+                   colour = as.factor(cluster_kmedians))) +
+    scale_fill_brewer(palette = "Dark2") +
+    guides(col = FALSE) +
+    ggtitle("K-median") +
+    theme_minimal() 
+
+mean_plot <- clus_df %>%
+  ggplot() +
+    geom_point(aes(x = x1, y = x2, 
+                   colour = as.factor(cluster_kmeans))) +
+    scale_fill_brewer(palette = "Dark2") +
+    guides(col = FALSE) +
+    ggtitle("K-means") +
+    theme_minimal() 
+
+median_plot + mean_plot
+
+```
+
+
+The plots above shows that the main difference in clusters between median and mean is in the top of the plot (x2 above 0.5). The cluster on the bottom it is pretty much the same in both plots, probably because the points keep certain distance in relation to the top points. 
+
+On the other hand, on the top of the plots, the points are more concetrated and then one can see the difference between median and mean more clearly. F
+
+
+
+

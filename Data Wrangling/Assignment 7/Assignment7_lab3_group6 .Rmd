@@ -1,0 +1,356 @@
+---
+title: "Assignment 7, lab 3, group 6"  
+author: Juan Moreno Diez, Letícia Marçal Russo, Luc Lubbers   
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+       highlight: textmate
+       theme: flatly
+       number_sections: yes
+       toc: yes
+       toc_float:
+         collapsed: yes
+         smooth_scroll: no
+---
+# Libraries
+
+```{r libraries, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(text2vec)
+library(tm)
+library(NLP)
+library(SnowballC)
+library(e1071)
+library(caret)
+library(pROC)
+library(ROCR)
+library(DALEX)
+library(knitr)
+```
+
+# The IMDB dataset
+
+IMDB movie reviews is a labeled data set available within the text2vec package. This data set 
+consists of 5000 IMDB movie reviews, specifically selected for sentiment analysis. The sentiment 
+of the reviews is binary, meaning an IMDB rating < 5 results in a sentiment score of 0, and a rating 
+>=7 has a sentiment score of 1. No individual movie has more than 30 reviews.
+
+## Corpus and data preprocessing
+
+Now we will load the data and preprocess it by creating a corpus and then generating the TF and TFiDF matrices.
+
+## Loading data and creation of corpus
+```{r}
+data("movie_review")
+
+# creation of the corpus
+review_corpus <- VCorpus(VectorSource(movie_review$review))
+```
+
+In order to reduce the dimension of the document term matrix, we will remove the terms that are less frequent such that we get a sparsity smaller than 95%.
+
+## Data preprocessing: TF matrix
+```{r TF dtm, warning = FALSE, message = FALSE}
+# tf matrix with all the preprocessing
+review_tf <- DocumentTermMatrix(review_corpus, control = list(
+  tolower = TRUE,
+  removeNumbers = TRUE,
+  stopwords = TRUE,
+  removePunctuation = TRUE,
+  stemming = TRUE
+))
+
+# reducing sparsity
+review_tf <- removeSparseTerms(review_tf, 0.95)
+inspect(review_tf)
+```
+
+## Data preprocessing: TF-IDF matrix
+
+Now we will follow the same procedure to create a matrix for TF-IDF. The difference is the arguments "weighting = weightTfIdf" in the function DocumentTermMatrix().
+
+```{r TF-IDF dtm, warning = FALSE, message = FALSE}
+# tfidf matrix with all the preprocessing
+review_tfidf <- DocumentTermMatrix(review_corpus, control = list(
+  tolower = TRUE,
+  removeNumbers = TRUE,
+  stopwords = TRUE,
+  removePunctuation = TRUE,
+  stemming = TRUE,
+  weighting = weightTfIdf
+))
+
+# reducing sparsity 
+review_tfidf <- removeSparseTerms(review_tfidf, 0.95)
+inspect(review_tfidf)
+```
+
+## Data splitting
+Next we will split the data it into training (80%) and test (20%) sets.
+
+```{r}
+# splitting the date into 80% train and 20% test
+# it doesnt matter whether we do the sample from the
+# tf or the tfidf matrix, we just need the same indexes
+indexes <- sort(sample(nrow(review_tf), nrow(review_tf)*.8))
+
+# training sets for the tf matrixes
+train_tf <- review_tf[indexes,]           
+test_tf <- review_tf[-indexes,]
+
+# test sets for the tfidf matrixes
+train_tfidf <- review_tfidf[indexes,]           
+test_tfidf <- review_tfidf[-indexes,]
+
+# get the sentiment labels from both sets
+labels_train <- as.factor(movie_review$sentiment[indexes])
+labels_test <- as.factor(movie_review$sentiment[-indexes])
+
+# check 
+str(train_tf)
+str(test_tf)
+```
+# Supervised learning: classification
+
+The two different document-term matrices we created will serve as input to a classifier, predicting the sentiment. 
+
+We will work with Naïve Bayes and Support Vector Machines. 
+
+## Naïve Bayes
+
+### TF 
+In this section we will work with Naïve Bayes, starting with TF. 
+ 
+We will now run the model. 
+
+```{r}
+set.seed(123)
+# wrap up the dtm, otherwise it doesnt work 
+# training of the Naive Bayes model
+naive_tf <- naiveBayes(as.matrix(train_tf), labels_train)
+```
+
+And make the prediction and confusion matrix for the train set. 
+```{r}
+# prediction with the training set
+pred_tf_train_nb <- predict(naive_tf, as.matrix(train_tf))
+confusionMatrix(labels_train, pred_tf_train_nb)
+```
+
+#### Performance: test set 
+Now we will check the performance in the test set. 
+
+```{r TF performance test, warning = FALSE, message = FALSE}
+# prediction with the test set
+pred_tf_test_nb <- predict(naive_tf, as.matrix(test_tf))
+cm_tf_nb <- confusionMatrix(labels_test, pred_tf_test_nb)
+```
+
+### TF-IDF
+
+We will do the same procedure now for the TF-IDF matrix. 
+
+```{r}
+set.seed(123)
+# fit the model to the training set
+naive_tfidf <- naiveBayes(as.matrix(train_tfidf), labels_train)
+```
+
+Prediction and confusion matrix for the train set: 
+```{r}
+# prediction with the training set
+pred_tfidf_nb <- predict(naive_tfidf, as.matrix(train_tfidf))
+confusionMatrix(labels_train, pred_tfidf_nb)
+```
+
+Now we will check the performance in the test set. 
+
+```{r TF-iDF performance test, warning = FALSE, message = FALSE}
+# prediction with the test set
+pred_tfidf_test_nb <- predict(naive_tfidf, as.matrix(test_tfidf))
+cm_tfidf_nb <- confusionMatrix(labels_test, pred_tfidf_test_nb)
+```
+
+## SVM
+
+Now we will run a second model with support vector machine (SVM).
+
+### TF 
+
+We will start with TF. 
+
+predict(naive_tf, as.matrix(review_tf_test))
+
+```{r}
+# train svm model with term-frequency data
+svm_model_tf <- svm(y = labels_train, 
+                    x = as.matrix(train_tf),
+                    type = "nu-classification", 
+                    ker = "linear")
+
+# predicting 
+pred_tf_train_svm <- predict(svm_model_tf, as.matrix(train_tf))
+# results in the train data
+confusionMatrix(labels_train, pred_tf_train_svm)
+```
+
+Now we will check the performance in the test set. 
+
+```{r svm tf performance test, warning = FALSE, message = FALSE}
+# predicting 
+pred_tf_test_svm <- predict(svm_model_tf, as.matrix(test_tf))
+# results in the test data
+cm_tf_svm <- confusionMatrix(labels_test, pred_tf_test_svm)
+```
+
+### TF-iDF
+
+Now, SVM with TF-iDF.
+
+```{r svm train tfidf}
+set.seed(123)
+
+# train svm model with tf-idf data
+svm_model_tfidf <- svm(y = labels_train, 
+                    x = as.matrix(train_tfidf),
+                    type = "nu-classification", 
+                    ker = "linear")
+
+# predicting
+pred_tfidf_train_svm <- predict(svm_model_tfidf, as.matrix(train_tfidf))
+
+# results in the train data
+confusionMatrix(labels_train, pred_tfidf_train_svm)
+```
+
+Now we will check the performance in the test set. 
+
+```{r svm tfidf performance test, warning = FALSE, message = FALSE}
+# predicting 
+pred_tfidf_test_svm <- predict(svm_model_tfidf, as.matrix(test_tfidf))
+# results in the train data
+cm_tfidf_svm <- confusionMatrix(labels_test, pred_tfidf_test_svm)
+```
+
+# Comparison of models
+
+## ROC curve and AUC
+
+### TF Naive Bayes
+```{r roc curve tf Naive Bayes}
+# necessary for processing the predictions from naive bayes
+predvec_tf_nb <- ifelse(pred_tf_test_nb=="1", 1, 0)
+# Use observed values against predicted values to make the roc curve
+pred_roc_tf_nb <- prediction(predvec_tf_nb, labels_test)
+
+roc_curve_1 <- performance(pred_roc_tf_nb, measure = "tpr", x.measure = "fpr")
+auc_tf_nb <- auc(labels_test, predvec_tf_nb)
+print(auc_tf_nb)
+plot(roc_curve_1, colorize = T, lwd = 2)
+abline(a = 0, b = 1)
+```
+
+### TFiDF Naive Bayes
+```{r roc curve tf-idf Naive Bayes}
+# necessary for processing the predictions from Naive Bayes
+predvec_tfidf_nb <- ifelse(pred_tfidf_test_nb=="1", 1, 0)
+# Use observed values against predicted values to make the roc curve
+pred_roc_tfidf_nb <- prediction(predvec_tfidf_nb, labels_test)
+
+roc_curve_2 <- performance(pred_roc_tfidf_nb, measure = "tpr", x.measure = "fpr")
+auc_tfidf_nb <- auc(labels_test, predvec_tfidf_nb)
+print(auc_tfidf_nb)
+plot(roc_curve_2, colorize = T, lwd = 2)
+abline(a = 0, b = 1)
+```
+
+### TF SVM
+```{r roc curve tf SVM}
+# Use observed values against predicted values to make the roc curve
+predvec_tf_svm <- ifelse(pred_tf_test_svm=="1", 1, 0)
+pred_roc_tf_svm <- prediction(predvec_tf_svm, labels_test)
+
+roc_curve_3 <- performance(pred_roc_tf_svm, measure = "tpr", x.measure = "fpr")
+auc_tf_svm <- auc(labels_test, predvec_tf_svm)
+print(auc_tf_svm)
+plot(roc_curve_3, colorize = T, lwd = 2)
+abline(a = 0, b = 1)
+```
+
+### TFiDF SVM
+```{r roc curve tf-idf SVM}
+# Use observed values against predicted values to make the roc curve
+predvec_tfidf_svm <- ifelse(pred_tfidf_test_svm=="1", 1, 0)
+pred_roc_tfidf_svm <- prediction(predvec_tfidf_svm, labels_test)
+
+roc_curve_4 <- performance(pred_roc_tfidf_svm, measure = "tpr", x.measure = "fpr")
+auc_tfidf_svm <- auc(labels_test, predvec_tfidf_svm)
+print(auc_tfidf_svm)
+plot(roc_curve_4, colorize = T, lwd = 2)
+abline(a = 0, b = 1)
+```
+
+## Loss: log-binary
+
+### TF Naive Bayes
+
+```{r loss tf Naive Bayes}
+loss_tf_nb <- lares::loglossBinary(as.numeric(labels_test), 
+                                   as.numeric(pred_tf_test_nb))
+print("Loss:")
+print(loss_tf_nb)
+``` 
+
+### TFiDF Naive Bayes
+```{r loss tfidf Naive Bayes}
+loss_tfidf_nb <- lares::loglossBinary(as.numeric(labels_test), 
+                                      as.numeric(pred_tfidf_test_nb))
+print("Loss:")
+print(loss_tfidf_nb)
+``` 
+
+### TF SVM
+```{r loss tf SVM}
+loss_tf_svm <- lares::loglossBinary(as.numeric(labels_test), 
+                                    as.numeric(pred_tf_test_svm))
+print("Loss:")
+print(loss_tf_svm)
+``` 
+
+### TFiDF SVM
+```{r loss tfidf SVM}
+loss_tfidf_svm <- lares::loglossBinary(as.numeric(labels_test),
+                                       as.numeric(pred_tfidf_test_svm))
+print("Loss:")
+print(loss_tfidf_svm)
+``` 
+
+# Results
+
+After the loss is calculated, we can conclude which model performs the best.In this assignment, we have created two machine learning-based sentiment classifiers for the IMDB database. We have used Naive Bayes and Support Vector Machine (SVM). Unfortunately, we could not predict with the SVM model using the test data so we can not compare the algorithms. Underneath, the table is given for the Naive Bayes model. 
+
+## Table of metrics for Naive Bayes
+
+```{r Table Naive Bayes}
+tab_nb <- matrix(c(cm_tf_nb$overall["Accuracy"], cm_tfidf_nb$overall["Accuracy"], loss_tf_nb,
+                   loss_tfidf_nb, auc_tf_nb, auc_tf_nb), ncol =3)
+colnames(tab_nb) <- c('Accuracy', 'Loss', 'AUC')
+rownames(tab_nb) <- c('TF', 'TFiDF')
+
+kable(tab_nb)
+``` 
+
+## Table of metrics for SVM
+
+```{r Table SVM}
+tab_svm <- matrix(c(cm_tf_svm$overall["Accuracy"], cm_tfidf_svm$overall["Accuracy"], loss_tf_svm, loss_tfidf_svm, auc_tf_svm, auc_tfidf_svm), ncol =3)
+colnames(tab_svm) <- c('Accuracy', 'Loss', 'AUC')
+rownames(tab_svm) <- c('TF', 'TFiDF')
+
+kable(tab_svm)
+``` 
+
+## Which model performs better?
+The Accuracy of the TF representation is higher (higher accuracy = better). In the Naive Bayes model, the loss is negative for both representations. The Area Under Curve (AUC) for the TFiDF representation is a little bit lower. The closer the AUC is to 1, the better the model. 
+
+We can conclude that the TF representation performs better than TFiDF. Although the difference between both of them is not that big, it could be taken into account when performing with larger datasets. 
